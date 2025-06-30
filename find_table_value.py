@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import re
+from collections import defaultdict
 
 def normalize_col(col):
     # 소문자, 공백/특수문자 제거
@@ -111,6 +112,9 @@ def find_table_value(df):
         "description.qty": [("", "Q'ty")],
         "description.price": [("", "Price(￥)")],
         "description.amount": [("", "Amount(￥)")],
+        "description.material_no": [
+            ("", "material NO."), ("", "Material NO."), ("", "MaterialNo"), ("", "MATERIAL NO")
+        ],
         "n_w.kgs": [("N/W", "(kgs)")],
         "g_w.kgs": [("G/W", "(kgs)")],
         "dimension.l": [("Dimension(ｃｍ）", "Ｌ")],
@@ -121,15 +125,20 @@ def find_table_value(df):
 
     columns = list(df_data.columns)
     print("실제 columns:", columns)
-    col_case_no = find_best_column(columns, key_map["case_no"])
-    if col_case_no is None:
+    case_no_col = find_best_column(columns, key_map["case_no"])
+    if case_no_col is None:
         return []
 
+    # 병합 셀로 인한 빈 값 채우기 (case_no)
+    case_no_col = find_best_column(list(df_data.columns), key_map["case_no"])
+    if case_no_col is not None:
+        df_data[case_no_col] = df_data[case_no_col].replace("", pd.NA).fillna(method="ffill")
+
     # 4. 유효 행만 필터 (CASE No.가 있는 행만)
-    if isinstance(col_case_no, tuple):
-        col_series = df_data.loc[:, [col_case_no]].squeeze()
+    if isinstance(case_no_col, tuple):
+        col_series = df_data.loc[:, [case_no_col]].squeeze()
     else:
-        col_series = df_data[col_case_no]
+        col_series = df_data[case_no_col]
     if isinstance(col_series, pd.DataFrame):
         col_series = col_series.iloc[:, 0]
     col_series = col_series.astype(str).str.strip()
@@ -145,13 +154,13 @@ def find_table_value(df):
     result = []
     for _, row in valid_rows.iterrows():
         item = {}
-        item["case_no"] = safe_get(row, col_case_no)
+        item["case_no"] = safe_get(row, case_no_col)
         col_package_style = find_best_column(columns, key_map["package.style"])
         item["package"] = {"style": safe_get(row, col_package_style)}
 
         desc = {}
         for subkey in [
-            "contract_no", "por_no", "eng_model", "company_serial", "drw_no", "parts_name", "qty", "price", "amount"
+            "contract_no", "por_no", "eng_model", "company_serial", "drw_no", "parts_name", "qty", "price", "amount", "material_no"
         ]:
             map_key = f"description.{subkey}"
             col = find_best_column(columns, key_map[map_key])
@@ -159,9 +168,20 @@ def find_table_value(df):
         item["description"] = desc
 
         col_nw = find_best_column(columns, key_map["n_w.kgs"])
-        item["n_w"] = {"kgs": safe_get(row, col_nw)}
+        nw_val = safe_get(row, col_nw)
+        try:
+            nw_val_fmt = f"{float(nw_val):.2f}" if nw_val and nw_val.replace('.','',1).isdigit() else nw_val
+        except Exception:
+            nw_val_fmt = nw_val
+        item["n_w"] = {"kgs": nw_val_fmt}
+
         col_gw = find_best_column(columns, key_map["g_w.kgs"])
-        item["g_w"] = {"kgs": safe_get(row, col_gw)}
+        gw_val = safe_get(row, col_gw)
+        try:
+            gw_val_fmt = f"{float(gw_val):.2f}" if gw_val and gw_val.replace('.','',1).isdigit() else gw_val
+        except Exception:
+            gw_val_fmt = gw_val
+        item["g_w"] = {"kgs": gw_val_fmt}
 
         col_l = find_best_column(columns, key_map["dimension.l"])
         col_w = find_best_column(columns, key_map["dimension.w"])
@@ -173,13 +193,73 @@ def find_table_value(df):
         }
 
         col_m3 = find_best_column(columns, key_map["mment.m3"])
-        item["mment"] = {"m3": safe_get(row, col_m3)}
+        m3_val = safe_get(row, col_m3)
+        try:
+            m3_val_fmt = f"{float(m3_val):.3f}" if m3_val and m3_val.replace('.','',1).isdigit() else m3_val
+        except Exception:
+            m3_val_fmt = m3_val
+        item["mment"] = {"m3": m3_val_fmt}
 
         result.append(item)
+
+    return result
+
+def group_by_main_keys_and_collect_por_no(items):
+    """
+    items: find_table_value의 결과 리스트
+    주요 정보(case_no, contract_no, eng_model 등)가 같은 경우 por_no를 리스트로 묶어서 반환
+    """
+    grouped = defaultdict(lambda: {
+        "case_no": None,
+        "package": {},
+        "description": {},
+        "n_w": {},
+        "g_w": {},
+        "dimension": {},
+        "mment": {},
+        "por_no_list": []
+    })
+
+    for item in items:
+        case_no = item.get("case_no", "")
+        por_no = item["description"].get("por_no", "")
+        print(f"[DEBUG] case_no: {case_no}, por_no: {por_no}")
+        key = (case_no,)
+        if grouped[key]["case_no"] is None:
+            grouped[key]["case_no"] = case_no
+            grouped[key]["package"] = item.get("package", {})
+            desc = item.get("description", {}).copy()
+            if "por_no_list" in desc:
+                del desc["por_no_list"]
+            grouped[key]["description"] = desc
+            grouped[key]["n_w"] = item.get("n_w", {})
+            grouped[key]["g_w"] = item.get("g_w", {})
+            grouped[key]["dimension"] = item.get("dimension", {})
+            grouped[key]["mment"] = item.get("mment", {})
+            grouped[key]["por_no_list"] = []
+        por_no = item["description"].get("por_no", "")
+        if not isinstance(grouped[key]["por_no_list"], list):
+            grouped[key]["por_no_list"] = []
+        if por_no and por_no not in grouped[key]["por_no_list"]:
+            grouped[key]["por_no_list"].append(por_no)
+    # por_no_list를 description에 넣어주기 (description dict에 직접 넣지 않고, result 만들 때만 추가)
+    result = []
+    for v in grouped.values():
+        desc = v["description"].copy() if isinstance(v["description"], dict) else {}
+        desc["por_no_list"] = v["por_no_list"] if isinstance(v["por_no_list"], list) else []
+        result.append({
+            "case_no": v["case_no"],
+            "package": v["package"],
+            "description": desc,
+            "n_w": v["n_w"],
+            "g_w": v["g_w"],
+            "dimension": v["dimension"],
+            "mment": v["mment"]
+        })
     return result
 
 if __name__ == "__main__":
-    file_path = "/Users/zionchoi/Desktop/test_pdf/HHI24-152_20241010.xlsx"
+    file_path = "/Users/zionchoi/Desktop/test_pdf/HHIENG25-036_20250612.xlsx"
     try:
         # 엑셀 파일을 DataFrame으로 읽기
         xls = pd.ExcelFile(file_path)
@@ -187,7 +267,8 @@ if __name__ == "__main__":
             df = xls.parse(sheet_name, header=None)
             result = find_table_value(df)
             if result:
-                print(json.dumps(result, ensure_ascii=False, indent=2))
+                grouped_result = group_by_main_keys_and_collect_por_no(result)
+                print(json.dumps(grouped_result, ensure_ascii=False, indent=2))
                 break
         else:
             print(json.dumps([], ensure_ascii=False, indent=2))
