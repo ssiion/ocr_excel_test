@@ -30,13 +30,16 @@ def extract_shipper_consignee(df):
     """
     엑셀 데이터에서 Shipper와 Consignee 정보를 추출합니다.
     """
-    def find_index(keyword):
+    # 1. 텍스트로 찾기
+    def find_index(keywords):
         for idx, row in df.iterrows():
             joined = " ".join(row.fillna("").tolist()).lower()
-            if keyword in joined:
-                return idx
+            for keyword in keywords:
+                if keyword in joined:
+                    return idx
         return None
-    
+
+    # 1-1. 우측 + 우측 포함 하단에 데이터가 있는 경우
     def get_next_lines(start_idx):
         lines = []
         
@@ -58,7 +61,6 @@ def extract_shipper_consignee(df):
                         if cell_value and not any(k in cell_value.lower() for k in ["shipper", "consignee"]):
                             lines.append(cell_value)
         
-        # 2. 키워드 아래 행들의 정보 추출 (기존 로직)
         for offset in range(1, 5):
             if start_idx + offset < len(df):
                 # 각 셀의 'nan'을 공백으로 변환
@@ -71,8 +73,15 @@ def extract_shipper_consignee(df):
                     break
         return lines
 
-    shipper_idx = find_index("shipper")
-    consignee_idx = find_index("consignee")
+    # 1-2. 하단 + 우측에 데이터가 있는 경우
+
+    # 헤더 키워드 설정
+    shipper_header_keywords = ["shipper", "shipper/exporter"]
+    consignee_header_keywords = ["consignee"]
+
+    # 헤더 찾기
+    shipper_idx = find_index(shipper_header_keywords)
+    consignee_idx = find_index(consignee_header_keywords)
 
     shipper_info = get_next_lines(shipper_idx) if shipper_idx is not None else []
     consignee_info = get_next_lines(consignee_idx) if consignee_idx is not None else []
