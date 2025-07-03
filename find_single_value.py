@@ -12,22 +12,30 @@ def find_all_header_locations(df, keywords):
                     found.append((keyword, idx, col_idx))
     return found
 
-def extract_box_column(df, header_row_idx, col_idx):
+# column mode
+def extract_box_column(df, header_row_idx, col_idx, offset=0, x=1, y=None):
     lines = []
     started = False
-    for idx in range(header_row_idx + 1, len(df)):
-        cell_value = str(df.iloc[idx, col_idx]).strip()
-        if not started:
+    start_col = col_idx + offset
+    end_col = df.shape[1] if x is None else start_col + x
+    start_row = header_row_idx + 1
+    end_row = len(df) if y is None else start_row + y
+    for idx in range(start_row, min(end_row, len(df))):
+        row = df.iloc[idx, start_col:end_col]
+        row_has_value = False
+        for cell in row:
+            cell_value = str(cell).strip()
             if cell_value and cell_value.lower() not in ["nan", "-", ""]:
-                started = True
+                row_has_value = True
                 lines.append(cell_value)
-            continue
-        if not cell_value or cell_value.lower() in ["nan", "-", ""]:
+        if not started and row_has_value:
+            started = True
+        if started and not row_has_value:
             break
-        lines.append(cell_value)
     return lines
 
-def extract_inline_below_header(df, header_row_idx):
+# inline mode (x, y는 무시)
+def extract_inline_below_header(df, header_row_idx, x=None, y=None):
     values = []
     if header_row_idx + 1 < len(df):
         row = df.iloc[header_row_idx + 1]
@@ -37,35 +45,35 @@ def extract_inline_below_header(df, header_row_idx):
                 values.append(cell_value)
     return values
 
-def extract_row_right_of_header(df, header_row_idx, header_col_idx, offset=1, width=None):
-    """
-    헤더 아래 행에서 (header_col_idx+offset) ~ (header_col_idx+offset+width)까지 모든 열 추출
-    - offset: 몇 칸 오른쪽부터 시작할지 (default=1, 즉 바로 옆)
-    - width: 몇 칸을 추출할지 (None이면 끝까지)
-    """
+# row mode (x: 오른쪽 열 개수, y: 아래 행 개수)
+def extract_row_right_of_header(df, header_row_idx, header_col_idx, offset=1, x=1, y=None):
     values = []
     start_col = header_col_idx + offset
-    end_col = df.shape[1] if width is None else start_col + width
-    if header_row_idx + 1 < len(df):
-        row = df.iloc[header_row_idx + 1, start_col:end_col]
+    end_col = df.shape[1] if x is None else start_col + x
+    start_row = header_row_idx + 1
+    end_row = len(df) if y is None else start_row + y
+    for idx in range(start_row, min(end_row, len(df))):
+        row = df.iloc[idx, start_col:end_col]
+        for cell in row:
+            cell_value = str(cell).strip()
+            if not cell_value or cell_value.lower() in ["nan", "-", ""]:
+                return values
+            values.append(cell_value)
+    return values
+
+# row_same mode (x: 오른쪽 열 개수, y: 같은 행만, y>1이면 같은 행부터 y개 행까지)
+def extract_row_right_of_header_same_row(df, header_row_idx, header_col_idx, offset=1, x=1, y=None):
+    values = []
+    start_col = header_col_idx + offset
+    end_col = df.shape[1] if x is None else start_col + x
+    start_row = header_row_idx
+    end_row = len(df) if y is None else start_row + y
+    for idx in range(start_row, min(end_row, len(df))):
+        row = df.iloc[idx, start_col:end_col]
         for cell in row:
             cell_value = str(cell).strip()
             if cell_value and cell_value.lower() not in ["nan", "-", ""]:
                 values.append(cell_value)
-    return values
-
-def extract_row_right_of_header_same_row(df, header_row_idx, header_col_idx, offset=1, width=None):
-    """
-    헤더와 같은 행에서 header_col_idx+offset부터 width만큼 오른쪽 데이터 추출
-    """
-    values = []
-    start_col = header_col_idx + offset
-    end_col = df.shape[1] if width is None else start_col + width
-    row = df.iloc[header_row_idx, start_col:end_col]
-    for cell in row:
-        cell_value = str(cell).strip()
-        if cell_value and cell_value.lower() not in ["nan", "-", ""]:
-            values.append(cell_value)
     return values
 
 def extract_multi_targets(file_path, targets):
@@ -81,18 +89,17 @@ def extract_multi_targets(file_path, targets):
             all_values = []
             for _, row_idx, col_idx in found_locs:
                 mode = conf.get("mode", "column")
+                offset = conf.get("offset", 0)
+                x = conf.get("x", 1)
+                y = conf.get("y", None)
                 if mode == "column":
-                    values = extract_box_column(df, row_idx, col_idx)
+                    values = extract_box_column(df, row_idx, col_idx, offset=offset, x=x, y=y)
                 elif mode == "inline":
-                    values = extract_inline_below_header(df, row_idx)
+                    values = extract_inline_below_header(df, row_idx, x=x, y=y)
                 elif mode == "row":
-                    offset = conf.get("offset", 1)
-                    width = conf.get("width", None)
-                    values = extract_row_right_of_header(df, row_idx, col_idx, offset=offset, width=width)
+                    values = extract_row_right_of_header(df, row_idx, col_idx, offset=offset, x=x, y=y)
                 elif mode == "row_same":
-                    offset = conf.get("offset", 1)
-                    width = conf.get("width", None)
-                    values = extract_row_right_of_header_same_row(df, row_idx, col_idx, offset=offset, width=width)
+                    values = extract_row_right_of_header_same_row(df, row_idx, col_idx, offset=offset, x=x, y=y)
                 else:
                     values = []
                 for v in values:
@@ -104,27 +111,62 @@ def extract_multi_targets(file_path, targets):
     return result
 
 if __name__ == "__main__":
-    file_path = "/Users/zionchoi/Desktop/test_pdf/PIJ-24-566(547349).xlsx"
+    # file_path = "/Users/zionchoi/Desktop/test_pdf/example_excel.xlsx"
+    file_path = "/Users/zionchoi/Desktop/test_pdf/6019  250623  SOLID(HAK)WOOYOUNGMI AIR 日東.xlsx"
+
     targets = {
+        "row_mode": {
+            "keywords": ["row mode"],
+            "mode": "row",
+            "offset": 1,
+            "x": 1,
+            "y": 4
+        },
+        "row_mode_same": {
+            "keywords": ["row_same mode"],
+            "mode": "row_same",
+            "offset": 1,
+            "x": 1,
+            "y": 2
+        },
+        "column_mode": {
+            "keywords": ["column mode"],
+            "mode": "column",
+            "offset": 1,
+            "x": 1,
+            "y": 4
+        },
+        "inline_mode": {
+            "keywords": ["inline mode"],
+            "mode": "inline"
+        },
         "shipper": {
             "keywords": ["shipper", "shipper/exporter", "exporter"],
-            "mode": "column"
+            "mode": "column",
+            "offset": 1,
+            "x": 1,
+            "y": 4
         },
         "consignee": {
             "keywords": ["consignee", "consignee/importer", "consigee"],
-            "mode": "column"
+            "mode": "column",
+            "offset": 1,
+            "x": 1,
+            "y": 4
         },
         "depatrure": {
             "keywords": ["depatrure"],
             "mode": "row_same",
             "offset": 1,     # CODE NO.가 notify 오른쪽 첫 칸이면 1
-            "width": 3       # 3칸만 긁고 싶으면 3, 끝까지는 None
+            "x": 3,          # 3칸만 긁고 싶으면 3, 끝까지는 None
+            "y": 1
         },
         "invoice_no": {
-            "keywords": ["invoice no"],
+            "keywords": ["invoice no", "inv no"],
             "mode": "row_same",
             "offset": 1,
-            "width": 2
+            "x": 2,
+            "y": 1
         },
         "notify_all": {
             "keywords": ["notify", "notify party"],
