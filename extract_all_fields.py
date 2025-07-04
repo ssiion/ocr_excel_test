@@ -123,7 +123,7 @@ def extract_from_excel(file_path):
     return result
 
 if __name__ == "__main__":
-    file_path = "/Users/zionchoi/Desktop/test_pdf/HHIENG25-036_20250612.xlsx"
+    file_path = "/Users/zionchoi/Desktop/test_pdf/HHI24-152_20241010.xlsx"
     
     try:
         result = extract_from_excel(file_path)

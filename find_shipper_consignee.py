@@ -74,6 +74,13 @@ def extract_shipper_consignee(df):
         return lines
 
     # 1-2. 하단 + 우측에 데이터가 있는 경우
+    def get_bottom_lines(start_idx):
+        lines = []
+
+        # 1. 같은 행에서 키워드 아래쪽 셀들의 정보 추출
+        # if start_idx is not None:
+
+        return None
 
     # 헤더 키워드 설정
     shipper_header_keywords = ["shipper", "shipper/exporter"]
@@ -88,8 +95,17 @@ def extract_shipper_consignee(df):
 
     return shipper_info, consignee_info
 
+def find_index_all_cells(df, keywords):
+    for idx, row in df.iterrows():
+        for col_idx, cell in enumerate(row):
+            cell_str = str(cell).lower()
+            for keyword in keywords:
+                if keyword in cell_str:
+                    return idx, col_idx
+    return None, None
+
 if __name__ == "__main__":
-    file_path = "/Users/zionchoi/Desktop/test_pdf/HHIENG25-036_20250612.xlsx"
+    file_path = "/Users/zionchoi/Desktop/test_pdf/ST-2506-3178  250624  4PLUS AIR.xlsx"
     result = extract_single_value(file_path)
 
     if not result:

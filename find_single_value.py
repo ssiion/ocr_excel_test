@@ -34,17 +34,6 @@ def extract_box_column(df, header_row_idx, col_idx, offset=0, x=1, y=None):
             break
     return lines
 
-# inline mode (x, y는 무시)
-def extract_inline_below_header(df, header_row_idx, x=None, y=None):
-    values = []
-    if header_row_idx + 1 < len(df):
-        row = df.iloc[header_row_idx + 1]
-        for cell in row:
-            cell_value = str(cell).strip()
-            if cell_value and cell_value.lower() not in ["nan", "-", ""]:
-                values.append(cell_value)
-    return values
-
 # row mode (x: 오른쪽 열 개수, y: 아래 행 개수)
 def extract_row_right_of_header(df, header_row_idx, header_col_idx, offset=1, x=1, y=None):
     values = []
@@ -61,8 +50,8 @@ def extract_row_right_of_header(df, header_row_idx, header_col_idx, offset=1, x=
             values.append(cell_value)
     return values
 
-# row_same mode (x: 오른쪽 열 개수, y: 같은 행만, y>1이면 같은 행부터 y개 행까지)
-def extract_row_right_of_header_same_row(df, header_row_idx, header_col_idx, offset=1, x=1, y=None):
+# row_single mode (x: 오른쪽 열 개수, y: 같은 행만, y>1이면 같은 행부터 y개 행까지)
+def extract_row_right_of_header_single_row(df, header_row_idx, header_col_idx, offset=1, x=1, y=None):
     values = []
     start_col = header_col_idx + offset
     end_col = df.shape[1] if x is None else start_col + x
@@ -94,12 +83,12 @@ def extract_multi_targets(file_path, targets):
                 y = conf.get("y", None)
                 if mode == "column":
                     values = extract_box_column(df, row_idx, col_idx, offset=offset, x=x, y=y)
-                elif mode == "inline":
-                    values = extract_inline_below_header(df, row_idx, x=x, y=y)
+                elif mode == "column_single":
+                    values = extract_column_single_below_header(df, row_idx, x=x, y=y)
                 elif mode == "row":
                     values = extract_row_right_of_header(df, row_idx, col_idx, offset=offset, x=x, y=y)
-                elif mode == "row_same":
-                    values = extract_row_right_of_header_same_row(df, row_idx, col_idx, offset=offset, x=x, y=y)
+                elif mode == "row_single":
+                    values = extract_row_right_of_header_single_row(df, row_idx, col_idx, offset=offset, x=x, y=y)
                 else:
                     values = []
                 for v in values:
@@ -112,7 +101,7 @@ def extract_multi_targets(file_path, targets):
 
 if __name__ == "__main__":
     # file_path = "/Users/zionchoi/Desktop/test_pdf/example_excel.xlsx"
-    file_path = "/Users/zionchoi/Desktop/test_pdf/6019  250623  SOLID(HAK)WOOYOUNGMI AIR 日東.xlsx"
+    file_path = "/Users/zionchoi/Desktop/test_pdf/SK-10665（6226）.xlsx"
 
     targets = {
         "row_mode": {
@@ -122,9 +111,9 @@ if __name__ == "__main__":
             "x": 1,
             "y": 4
         },
-        "row_mode_same": {
-            "keywords": ["row_same mode"],
-            "mode": "row_same",
+        "row_mode_single": {
+            "keywords": ["row_single mode"],
+            "mode": "row_single",
             "offset": 1,
             "x": 1,
             "y": 2
@@ -136,41 +125,45 @@ if __name__ == "__main__":
             "x": 1,
             "y": 4
         },
-        "inline_mode": {
-            "keywords": ["inline mode"],
-            "mode": "inline"
+        "column_single_mode": {
+            "keywords": ["column_single mode"],
+            "mode": "column_single"
         },
         "shipper": {
             "keywords": ["shipper", "shipper/exporter", "exporter"],
             "mode": "column",
-            "offset": 1,
+            "offset": 0,
             "x": 1,
-            "y": 4
+            "y": 5
         },
         "consignee": {
             "keywords": ["consignee", "consignee/importer", "consigee"],
             "mode": "column",
-            "offset": 1,
+            "offset": 0,
             "x": 1,
             "y": 4
         },
         "depatrure": {
             "keywords": ["depatrure"],
-            "mode": "row_same",
+            "mode": "row_single",
             "offset": 1,     # CODE NO.가 notify 오른쪽 첫 칸이면 1
             "x": 3,          # 3칸만 긁고 싶으면 3, 끝까지는 None
             "y": 1
         },
         "invoice_no": {
-            "keywords": ["invoice no", "inv no"],
-            "mode": "row_same",
+            "keywords": ["invoice no", "inv.no"],
+            "mode": "row_single",
             "offset": 1,
-            "x": 2,
+            "x": 3,
             "y": 1
         },
         "notify_all": {
             "keywords": ["notify", "notify party"],
-            "mode": "column"  # header 아래 한 줄 전체 값 추출
+            "mode": "column"
+        },
+        "destination": {
+            "keywords": ["destination"],
+            "mode": "column"
         }
     }
     result = extract_multi_targets(file_path, targets)
