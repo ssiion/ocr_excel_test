@@ -83,8 +83,6 @@ def extract_multi_targets(file_path, targets):
                 y = conf.get("y", None)
                 if mode == "column":
                     values = extract_box_column(df, row_idx, col_idx, offset=offset, x=x, y=y)
-                elif mode == "column_single":
-                    values = extract_column_single_below_header(df, row_idx, x=x, y=y)
                 elif mode == "row":
                     values = extract_row_right_of_header(df, row_idx, col_idx, offset=offset, x=x, y=y)
                 elif mode == "row_single":
