@@ -12,6 +12,12 @@ def find_all_header_locations(df, keywords):
                     found.append((keyword, idx, col_idx))
     return found
 
+"""
+offset: 추출을 시작할 열 인덱스
+x: 추출할 열 개수
+y: 추출할 행 개수
+"""
+
 # column mode
 def extract_box_column(df, header_row_idx, col_idx, offset=0, x=1, y=None):
     lines = []
